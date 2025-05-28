@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text Formatter Deluxe</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.7.0/mammoth.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .occurrence-item, .repetition-group-item {
+            border: 1px solid #e2e8f0;
+            padding: 12px;
+            margin-bottom: 12px;
+            border-radius: 8px;
+            background-color: #f8fafc;
+        }
+        .repetition-group-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .repetition-group-header .master-checkbox {
+            flex-shrink: 0;
+        }
+        .repetition-group-header .group-text {
+            font-weight: 600;
+            color: #1e293b;
+            word-break: break-all;
+        }
+        .context-line {
+            color: #64748b;
+            font-size: 0.875rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .current-line {
+            color: #1e293b;
+            font-weight: 500;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .highlight {
+            background-color: #fef9c3;
+            font-weight: 700;
+            padding: 0 2px;
+            border-radius: 3px;
+        }
+        #resultsDiv::-webkit-scrollbar { width: 8px; }
+        #resultsDiv::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
+        #resultsDiv::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 10px; }
+        #resultsDiv::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        .action-button, .control-button {
+            font-weight: 600;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1);
+            transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .action-button:hover, .control-button:hover {
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
+            transform: scale(1.03);
+        }
+        .action-button:focus, .control-button:focus {
+            outline: 2px solid transparent;
+            outline-offset: 2px;
+            box-shadow: 0 0 0 3px var(--tw-ring-color);
+        }
+        .action-button:disabled, .control-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1);
+        }
+        .feature-box {
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            background-color: rgba(249, 250, 251, 0.5);
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+        input[type="file"] {
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+            padding: 0.5rem 0.75rem;
+            font-size: 0.875rem;
+            color: #374151;
+            background-color: white;
+        }
+        input[type="file"]::file-selector-button {
+            margin-right: 0.75rem; border: none;
+            background-color: #4f46e5; padding: 0.5rem 1rem;
+            border-radius: 0.375rem; color: white;
+            font-weight: 500; cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        input[type="file"]::file-selector-button:hover { background-color: #4338ca; }
+        .checkbox-base {
+             height: 1.25rem; width: 1.25rem;
+             color: #3b82f6; border-color: #9ca3af;
+             border-radius: 0.25rem;
+        }
+        .checkbox-base:focus {
+            --tw-ring-color: #60a5fa;
+            box-shadow: 0 0 0 2px var(--tw-ring-color);
+        }
+        .num-nav-btn {
+            margin-left: 0.25rem; font-size: 0.75rem;
+            background-color: #e5e7eb; padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem; border: 1px solid #d1d5db;
+            color: #374151; cursor: pointer;
+        }
+        .num-nav-btn:hover { background-color: #d1d5db; }
+        .num-nav-btn:disabled {
+            background-color: #f3f4f6; color: #9ca3af; cursor: not-allowed;
+        }
+        .order-warning {
+            font-size: 0.75rem; color: #f59e0b;
+            margin-left: 0.5rem; font-weight: 500;
+        }
+        #wordCountDisplay {
+            margin-top: 0.5rem;
+            font-size: 0.875rem;
+            color: #4b5563;
+        }
+        #historyLogList li.current-history-item {
+            background-color: #e0e7ff; /* indigo-100 */
+            font-weight: 600;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col items-center py-8 px-4">
+
+    <div class="bg-white p-6 sm:p-8 rounded-xl shadow-2xl w-full max-w-4xl">
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl sm:text-4xl font-bold text-sky-600">Text Formatter Deluxe</h1>
+            <p class="text-slate-500 mt-2">Paste your text, upload a file, or use the tools below to modify it.</p>
+        </header>
+
+        <div class="mb-6 flex flex-wrap gap-3 justify-center sm:justify-start">
+            <button id="undoButton" class="control-button bg-slate-500 hover:bg-slate-600 text-white focus:ring-slate-400" disabled>Undo</button>
+            <button id="redoButton" class="control-button bg-slate-500 hover:bg-slate-600 text-white focus:ring-slate-400" disabled>Redo</button>
+            <button id="exportPdfButton" class="control-button bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-400">Export as PDF</button>
+        </div>
+
+        <div class="mb-2"> <label for="mainTextArea" class="block text-lg font-semibold mb-2 text-slate-700">Your Text:</label>
+            <textarea id="mainTextArea" rows="10"
+                class="w-full p-4 border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition duration-150 ease-in-out"
+                placeholder="Paste your text here or upload a file..."></textarea>
+            <div id="wordCountDisplay">Words: 0 / Original: 0</div>
+        </div>
+
+        <div class="mb-8">
+            <button id="toggleHistoryButton" class="text-sm text-sky-600 hover:text-sky-700 font-medium py-1">
+                Show Action History
+            </button>
+            <div id="historyLogContainer" class="mt-1 border border-slate-200 rounded-lg p-3 bg-slate-50 shadow-sm" style="display: none;">
+                <h4 class="text-sm font-semibold mb-1 text-slate-600">Action History (Latest First):</h4>
+                <ul id="historyLogList" class="list-none space-y-1 text-xs text-slate-500 max-h-32 overflow-y-auto pr-1">
+                    </ul>
+            </div>
+        </div>
+
+
+        <div class="feature-box">
+            <h3 class="text-lg font-semibold text-green-700 mb-3">Upload File for Text Extraction</h3>
+            <div class="flex flex-col sm:flex-row sm:items-end gap-4">
+                <div class="flex-grow">
+                    <label for="fileInput" class="block text-sm font-medium text-slate-600 mb-1">Select PDF or DOCX file:</label>
+                    <input type="file" id="fileInput" accept=".pdf,.docx" class="w-full">
+                </div>
+                <button id="uploadFileButton"
+                        class="action-button bg-green-600 hover:bg-green-700 text-white focus:ring-green-500 focus:ring-opacity-50 h-12 w-full sm:w-auto">
+                    Upload and Extract
+                </button>
+            </div>
+        </div>
+
+        <div class="border-t border-slate-200 pt-8 mt-8">
+            <h2 class="text-2xl font-semibold mb-6 text-slate-700">Find and Modify Existing Text</h2>
+            <div class="feature-box">
+                <h3 class="text-lg font-semibold text-sky-700 mb-3">Find and Remove Specific Text</h3>
+                <div class="flex flex-col sm:flex-row sm:items-end gap-4">
+                    <div class="flex-grow">
+                        <label for="findInput" class="block text-sm font-medium text-slate-600 mb-1">Text to Find:</label>
+                        <input type="text" id="findInput" class="w-full p-3 border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500" placeholder="Enter text to search for...">
+                    </div>
+                    <button id="findButton" class="action-button bg-sky-600 hover:bg-sky-700 text-white focus:ring-sky-500 h-12 w-full sm:w-auto">Find Occurrences</button>
+                </div>
+            </div>
+            <div class="feature-box">
+                <h3 class="text-lg font-semibold text-teal-700 mb-3">Find and Remove Numbered References</h3>
+                <div class="flex flex-col sm:flex-row sm:items-end gap-4">
+                    <div class="w-full sm:w-auto sm:flex-grow-0">
+                        <label for="startNumberInput" class="block text-sm font-medium text-slate-600 mb-1">Start Number:</label>
+                        <input type="number" id="startNumberInput" value="1" min="1" class="w-full sm:w-32 p-3 border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none">
+                    </div>
+                     <button id="findNumberedRefsButton" class="action-button bg-teal-600 hover:bg-teal-700 text-white focus:ring-teal-500 h-12 w-full sm:w-auto flex-grow sm:flex-grow-0">Find Ascending Numbers</button>
+                </div>
+            </div>
+            <div class="feature-box">
+                <h3 class="text-lg font-semibold text-purple-700 mb-3">Find and Remove Text in Parentheses</h3>
+                <div class="flex sm:items-end gap-4">
+                     <button id="findParenthesesButton" class="action-button bg-purple-600 hover:bg-purple-700 text-white focus:ring-purple-500 h-12 w-full sm:w-auto">Find Text in Parentheses (...)</button>
+                </div>
+            </div>
+            <div class="feature-box">
+                <h3 class="text-lg font-semibold text-orange-700 mb-3">Find Repetitions</h3>
+                 <div class="flex flex-col sm:flex-row sm:items-end gap-4">
+                    <div class="w-full sm:w-auto sm:flex-grow-0">
+                        <label for="repetitionLengthInput" class="block text-sm font-medium text-slate-600 mb-1">Min. Words in Repetition:</label>
+                        <input type="number" id="repetitionLengthInput" value="4" min="2" class="w-full sm:w-48 p-3 border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none">
+                    </div>
+                     <button id="findRepetitionsButton" class="action-button bg-orange-600 hover:bg-orange-700 text-white focus:ring-orange-500 h-12 w-full sm:w-auto flex-grow sm:flex-grow-0">Find Repetitions</button>
+                </div>
+            </div>
+
+            <div id="statusMessage" class="mb-4 text-slate-600 min-h-[1.5em]"></div>
+            <div id="resultsContainer" class="mb-6">
+                <h3 class="text-xl font-semibold mb-3 text-slate-700" id="resultsHeader" style="display: none;">Found Items:</h3>
+                <div id="resultsDiv" class="max-h-[30rem] overflow-y-auto space-y-3 pr-2"></div>
+            </div>
+            <button id="removeButton" style="display: none;" class="action-button w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white focus:ring-red-500">Remove Checked Items</button>
+        </div>
+    </div>
+
+    <script>
+        if (window.pdfjsLib) {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        } else { console.error("PDF.js library not loaded."); }
+
+        let globalFoundOccurrences = [];
+        let currentFindType = null;
+
+        let history = [];
+        let historyIndex = -1;
+        const MAX_HISTORY_SIZE = 10;
+        let originalTextContent = "";
+        let originalWordCount = 0;
+        let debounceTimer; // For debouncing saveState on input
+
+        const mainTextArea = document.getElementById('mainTextArea');
+        const undoButton = document.getElementById('undoButton');
+        const redoButton = document.getElementById('redoButton');
+        const exportPdfButton = document.getElementById('exportPdfButton');
+        const wordCountDisplay = document.getElementById('wordCountDisplay');
+        const toggleHistoryButton = document.getElementById('toggleHistoryButton');
+        const historyLogContainer = document.getElementById('historyLogContainer');
+        const historyLogList = document.getElementById('historyLogList');
+
+        const findInput = document.getElementById('findInput');
+        const findButton = document.getElementById('findButton');
+        const startNumberInput = document.getElementById('startNumberInput');
+        const findNumberedRefsButton = document.getElementById('findNumberedRefsButton');
+        const findParenthesesButton = document.getElementById('findParenthesesButton');
+        const repetitionLengthInput = document.getElementById('repetitionLengthInput');
+        const findRepetitionsButton = document.getElementById('findRepetitionsButton');
+        const fileInput = document.getElementById('fileInput');
+        const uploadFileButton = document.getElementById('uploadFileButton');
+        const resultsDiv = document.getElementById('resultsDiv');
+        const resultsHeader = document.getElementById('resultsHeader');
+        const removeButton = document.getElementById('removeButton');
+        const statusMessage = document.getElementById('statusMessage');
+
+        function escapeRegExp(string) { return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+        function escapeHTML(str) { const p = document.createElement('p'); p.textContent = str; return p.innerHTML; }
+
+        function countWords(text) {
+            if (!text || text.trim() === "") return 0;
+            return text.trim().split(/\s+/).length;
+        }
+
+        function updateWordCount() {
+            const currentText = mainTextArea.value;
+            const currentWords = countWords(currentText);
+            wordCountDisplay.textContent = `Words: ${currentWords} / Original: ${originalWordCount}`;
+        }
+
+        function renderHistoryLog() {
+            historyLogList.innerHTML = '';
+            if (history.length === 0) {
+                const li = document.createElement('li');
+                li.textContent = "No actions yet.";
+                li.className = "text-slate-400";
+                historyLogList.appendChild(li);
+                return;
+            }
+            for (let i = history.length - 1; i >= 0; i--) {
+                const state = history[i];
+                const li = document.createElement('li');
+                li.textContent = `${i + 1}. ${state.description}`;
+                if (i === historyIndex) {
+                    li.classList.add('current-history-item');
+                }
+                historyLogList.appendChild(li);
+            }
+        }
+
+        function saveState(text, actionDescription, isSource = false) {
+            if (!actionDescription) {
+                actionDescription = "Text edited";
+            }
+            if (history.length > 0 && history[historyIndex].text === text && !isSource) {
+                if (history[historyIndex].description !== actionDescription && historyIndex === history.length -1) {
+                     history[historyIndex].description = actionDescription;
+                     renderHistoryLog();
+                }
+                return;
+            }
+
+            if (isSource) {
+                originalTextContent = text;
+                originalWordCount = countWords(text);
+                history = [{ text, description: actionDescription }];
+                historyIndex = 0;
+            } else {
+                history = history.slice(0, historyIndex + 1);
+                history.push({ text, description: actionDescription });
+                if (history.length > MAX_HISTORY_SIZE) {
+                    history.shift();
+                    historyIndex = history.length -1;
+                } else {
+                    historyIndex = history.length - 1;
+                }
+            }
+            updateUndoRedoButtons();
+            updateWordCount();
+            renderHistoryLog();
+        }
+
+        function undo() {
+            if (historyIndex > 0) {
+                historyIndex--;
+                mainTextArea.value = history[historyIndex].text;
+                updateUndoRedoButtons(); updateWordCount(); renderHistoryLog();
+                clearPreviousResults();
+                statusMessage.textContent = "Undo successful."; statusMessage.className = 'mb-4 text-blue-600';
+            }
+        }
+
+        function redo() {
+            if (historyIndex < history.length - 1) {
+                historyIndex++;
+                mainTextArea.value = history[historyIndex].text;
+                updateUndoRedoButtons(); updateWordCount(); renderHistoryLog();
+                clearPreviousResults();
+                statusMessage.textContent = "Redo successful."; statusMessage.className = 'mb-4 text-blue-600';
+            }
+        }
+
+        function updateUndoRedoButtons() {
+            undoButton.disabled = historyIndex <= 0;
+            redoButton.disabled = historyIndex >= history.length - 1 || history.length === 0;
+        }
+
+        function exportToPDF() {
+            const { jsPDF } = window.jspdf;
+            if (!jsPDF) { statusMessage.textContent = "Error: jsPDF library not loaded."; statusMessage.className = 'mb-4 text-red-600'; return; }
+            const doc = new jsPDF();
+            const text = mainTextArea.value;
+            const pageHeight = doc.internal.pageSize.height; const pageWidth = doc.internal.pageSize.width;
+            const margin = 10; const usableWidth = pageWidth - 2 * margin;
+            const lineHeight = 7;
+            let y = margin;
+            const lines = doc.splitTextToSize(text, usableWidth);
+            lines.forEach(line => {
+                if (y + lineHeight > pageHeight - margin) { doc.addPage(); y = margin; }
+                doc.text(line, margin, y); y += lineHeight;
+            });
+            doc.save("formatted-text.pdf");
+            statusMessage.textContent = "PDF export initiated."; statusMessage.className = 'mb-4 text-green-600';
+        }
+
+        function extractContext(fullText, occurrenceStartIndex) {
+            let lineStartIndex = fullText.lastIndexOf('\n', occurrenceStartIndex - 1) + 1;
+            let lineEndIndex = fullText.indexOf('\n', occurrenceStartIndex);
+            if (lineEndIndex === -1) lineEndIndex = fullText.length;
+            const currentLineText = fullText.substring(lineStartIndex, lineEndIndex);
+            let lineAboveText = "";
+            if (lineStartIndex > 0) {
+                const prevLineBreakCharIndex = lineStartIndex - 1;
+                const prevLineStartIndex = fullText.lastIndexOf('\n', prevLineBreakCharIndex - 1) + 1;
+                lineAboveText = fullText.substring(prevLineStartIndex, prevLineBreakCharIndex);
+            }
+            let lineBelowText = "";
+            if (lineEndIndex < fullText.length) {
+                const nextLineStartIndex = lineEndIndex + 1;
+                if (nextLineStartIndex < fullText.length) {
+                    let nextLineEndIndex = fullText.indexOf('\n', nextLineStartIndex);
+                    if (nextLineEndIndex === -1) nextLineEndIndex = fullText.length;
+                    lineBelowText = fullText.substring(nextLineStartIndex, nextLineEndIndex);
+                }
+            }
+            return { above: lineAboveText.trim(), current: currentLineText, below: lineBelowText.trim(), lineStartIndex: lineStartIndex };
+        }
+
+        function clearPreviousResults() {
+            globalFoundOccurrences = []; resultsDiv.innerHTML = '';
+            resultsHeader.style.display = 'none'; removeButton.style.display = 'none';
+            currentFindType = null;
+        }
+
+        mainTextArea.addEventListener('input', () => {
+            updateWordCount();
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                saveState(mainTextArea.value, "Text edited manually");
+            }, 1500);
+        });
+
+        mainTextArea.addEventListener('paste', (event) => {
+            setTimeout(() => {
+                const currentText = mainTextArea.value;
+                let isFirstMeaningfulInput = (history.length === 0) ||
+                                           (history.length === 1 && countWords(history[0].text) === 0 && history[0].description === "Initial document loaded");
+                if (isFirstMeaningfulInput) {
+                     saveState(currentText, "Pasted initial content", true);
+                } else {
+                    saveState(currentText, "Pasted content");
+                }
+            }, 0);
+        });
+
+        undoButton.addEventListener('click', undo);
+        redoButton.addEventListener('click', redo);
+        exportPdfButton.addEventListener('click', exportToPDF);
+        toggleHistoryButton.addEventListener('click', () => {
+            const isHidden = historyLogContainer.style.display === 'none';
+            historyLogContainer.style.display = isHidden ? 'block' : 'none';
+            toggleHistoryButton.textContent = isHidden ? 'Hide Action History' : 'Show Action History';
+        });
+
+        uploadFileButton.addEventListener('click', async () => {
+            clearPreviousResults();
+            statusMessage.textContent = 'Processing file...'; statusMessage.className = 'mb-4 text-blue-600';
+            const file = fileInput.files[0];
+            if (!file) { statusMessage.textContent = 'Please select a file first.'; statusMessage.className = 'mb-4 text-amber-600'; return; }
+            const fileName = file.name.toLowerCase();
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                try {
+                    const arrayBuffer = event.target.result; let extractedText = "";
+                    if (fileName.endsWith('.pdf')) {
+                        if (!window.pdfjsLib) { throw new Error('PDF.js library not loaded.'); }
+                        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                        for (let i = 1; i <= pdf.numPages; i++) {
+                            const page = await pdf.getPage(i); const textContent = await page.getTextContent();
+                            textContent.items.forEach(item => extractedText += item.str + " ");
+                            // Add 3 newlines for 2 blank lines between pages
+                            if (i < pdf.numPages) { // Don't add after the last page
+                                extractedText += "\n\n\n";
+                            } else {
+                                extractedText += "\n"; // Single newline after the last page's content
+                            }
+                        }
+                    } else if (fileName.endsWith('.docx')) {
+                        if (!window.mammoth) { throw new Error('Mammoth.js library not loaded.'); }
+                        const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer }); extractedText = result.value;
+                    } else { throw new Error('Unsupported file type. Please upload PDF or DOCX.'); }
+                    const currentTextInArea = mainTextArea.value.trim();
+                    const newText = (currentTextInArea ? currentTextInArea + "\n\n" : "") + extractedText.trim();
+                    mainTextArea.value = newText;
+                    let isFirstMeaningfulInput = (history.length === 0) ||
+                                               (history.length === 1 && countWords(history[0].text) === 0 && history[0].description === "Initial document loaded");
+                    if (isFirstMeaningfulInput) {
+                        saveState(newText, `Loaded text from ${file.name}`, true);
+                    } else {
+                        saveState(newText, `Appended text from ${file.name}`);
+                    }
+                    statusMessage.textContent = `Successfully extracted text from ${file.name}.`; statusMessage.className = 'mb-4 text-green-600';
+                    fileInput.value = '';
+                } catch (error) {
+                    console.error("Error processing file:", error);
+                    statusMessage.textContent = `Error processing file: ${error.message || 'Unknown error'}`; statusMessage.className = 'mb-4 text-red-600';
+                }
+            };
+            reader.onerror = () => { statusMessage.textContent = 'Error reading file.'; statusMessage.className = 'mb-4 text-red-600'; };
+            reader.readAsArrayBuffer(file);
+        });
+
+        findButton.addEventListener('click', () => {
+            clearPreviousResults(); currentFindType = 'specificText'; statusMessage.textContent = '';
+            const mainText = mainTextArea.value; const searchTerm = findInput.value;
+            if (!searchTerm) { statusMessage.textContent = 'Please enter text to find.'; statusMessage.className = 'mb-4 text-amber-600'; return; }
+            if (!mainText) { statusMessage.textContent = 'Main text area is empty.'; statusMessage.className = 'mb-4 text-amber-600'; return; }
+            const escapedSearchTermForRegex = escapeRegExp(searchTerm);
+            const searchRegex = new RegExp(escapedSearchTermForRegex, 'g'); let match; let idCounter = 0;
+            while ((match = searchRegex.exec(mainText)) !== null) {
+                globalFoundOccurrences.push({
+                    id: `occurrence-${idCounter++}`, originalText: searchTerm,
+                    startIndexInFullText: match.index, endIndexInFullText: match.index + searchTerm.length,
+                    context: extractContext(mainText, match.index), checked: true
+                });
+            }
+            if (globalFoundOccurrences.length > 0) {
+                resultsHeader.style.display = 'block'; removeButton.style.display = 'inline-block';
+                statusMessage.textContent = `Found ${globalFoundOccurrences.length} occurrence(s) of "${searchTerm}".`;
+                statusMessage.className = 'mb-4 text-green-600'; renderSimpleOccurrences();
+            } else { statusMessage.textContent = `No occurrences of "${searchTerm}" found.`; statusMessage.className = 'mb-4 text-slate-600';}
+        });
+
+        findNumberedRefsButton.addEventListener('click', () => {
+            clearPreviousResults(); currentFindType = 'numberedRefs'; statusMessage.textContent = '';
+            const mainText = mainTextArea.value; const startNum = parseInt(startNumberInput.value, 10);
+            if (isNaN(startNum) || startNum < 1) { statusMessage.textContent = 'Please enter a valid starting number (1 or greater).'; statusMessage.className = 'mb-4 text-amber-600'; startNumberInput.focus(); return; }
+            if (!mainText) { statusMessage.textContent = 'Main text area is empty.'; statusMessage.className = 'mb-4 text-amber-600'; return; }
+            let expectedNumber = startNum; let searchFromIndex = 0; let tempOccurrences = []; let idCounter = 0;
+            while (true) {
+                const searchTerm = expectedNumber.toString();
+                const regex = new RegExp(`(?<!\\d)${escapeRegExp(searchTerm)}(?!\\d)`);
+                const match = regex.exec(mainText.substring(searchFromIndex));
+                if (match) {
+                    const occurrenceStartIndex = searchFromIndex + match.index;
+                    tempOccurrences.push({
+                        id: `numberedRef-${idCounter++}`, originalText: searchTerm, searchNumber: expectedNumber,
+                        startIndexInFullText: occurrenceStartIndex, endIndexInFullText: occurrenceStartIndex + searchTerm.length,
+                        context: extractContext(mainText, occurrenceStartIndex), checked: true,
+                        foundAfterIndex: searchFromIndex
+                    });
+                    searchFromIndex = occurrenceStartIndex + searchTerm.length; expectedNumber++;
+                } else { break; }
+            }
+            globalFoundOccurrences = tempOccurrences;
+            if (globalFoundOccurrences.length > 0) {
+                resultsHeader.style.display = 'block'; removeButton.style.display = 'inline-block';
+                statusMessage.textContent = `Found initial sequence of ${globalFoundOccurrences.length} numbered reference(s) starting from ${startNum}.`;
+                statusMessage.className = 'mb-4 text-green-600'; renderSimpleOccurrences();
+            } else { statusMessage.textContent = `No numbered references found starting from ${startNum}.`; statusMessage.className = 'mb-4 text-slate-600';}
+        });
+
+        findParenthesesButton.addEventListener('click', () => {
+            clearPreviousResults(); currentFindType = 'parentheses'; statusMessage.textContent = '';
+            const mainText = mainTextArea.value;
+            if (!mainText) { statusMessage.textContent = 'Main text area is empty.'; statusMessage.className = 'mb-4 text-amber-600'; return; }
+            const parenthesesRegex = /\((.*?)\)/g; let match; let idCounter = 0;
+            while ((match = parenthesesRegex.exec(mainText)) !== null) {
+                globalFoundOccurrences.push({
+                    id: `occurrence-${idCounter++}`, originalText: match[0],
+                    startIndexInFullText: match.index, endIndexInFullText: match.index + match[0].length,
+                    context: extractContext(mainText, match.index), checked: true
+                });
+            }
+            if (globalFoundOccurrences.length > 0) {
+                resultsHeader.style.display = 'block'; removeButton.style.display = 'inline-block';
+                statusMessage.textContent = `Found ${globalFoundOccurrences.length} piece(s) of text in parentheses.`;
+                statusMessage.className = 'mb-4 text-green-600'; renderSimpleOccurrences();
+            } else { statusMessage.textContent = 'No text found within parentheses.'; statusMessage.className = 'mb-4 text-slate-600';}
+        });
+
+        function getWordsWithIndices(text) {
+            const words = []; const regex = /\S+/g; let match;
+            while ((match = regex.exec(text)) !== null) { words.push({ text: match[0], start: match.index, end: regex.lastIndex });}
+            return words;
+        }
+
+        findRepetitionsButton.addEventListener('click', () => {
+            clearPreviousResults(); currentFindType = 'repetitions';
+            const minRepLength = parseInt(repetitionLengthInput.value, 10);
+            if (isNaN(minRepLength) || minRepLength < 2) { statusMessage.textContent = 'Please enter a valid minimum repetition length (2 or greater).'; statusMessage.className = 'mb-4 text-amber-600'; repetitionLengthInput.focus(); return; }
+            statusMessage.textContent = `Searching for repetitions (${minRepLength}+ words)...`; statusMessage.className = 'mb-4 text-blue-600';
+            const mainText = mainTextArea.value;
+            if (!mainText.trim()) { statusMessage.textContent = 'Main text area is empty.'; statusMessage.className = 'mb-4 text-amber-600'; return; }
+            const words = getWordsWithIndices(mainText);
+            const calculatedMaxWords = Math.floor(words.length / 2);
+            const MAX_REPETITION_WORDS = Math.min(15, Math.max(minRepLength, calculatedMaxWords));
+            if (words.length < minRepLength * 2 || MAX_REPETITION_WORDS < minRepLength) { statusMessage.textContent = `Not enough text to find repetitions of ${minRepLength}+ words.`; statusMessage.className = 'mb-4 text-slate-600'; return; }
+            setTimeout(() => {
+                const allPotentialRepetitions = []; const processedChunkTexts = new Set();
+                for (let L = MAX_REPETITION_WORDS; L >= minRepLength; L--) {
+                    for (let i = 0; i <= words.length - L; i++) {
+                        const firstInstanceStartWordObj = words[i]; const firstInstanceEndWordObj = words[i + L - 1];
+                        const chunkText = mainText.substring(firstInstanceStartWordObj.start, firstInstanceEndWordObj.end);
+                        if (processedChunkTexts.has(chunkText)) { continue; }
+                        const currentInstancesForThisChunk = [{ start: firstInstanceStartWordObj.start, end: firstInstanceEndWordObj.end, text: chunkText }];
+                        let searchFromIndex = firstInstanceEndWordObj.end; let nextMatchIndex;
+                        while ((nextMatchIndex = mainText.indexOf(chunkText, searchFromIndex)) !== -1) {
+                            currentInstancesForThisChunk.push({ start: nextMatchIndex, end: nextMatchIndex + chunkText.length, text: chunkText });
+                            searchFromIndex = nextMatchIndex + chunkText.length;
+                        }
+                        if (currentInstancesForThisChunk.length > 1) {
+                            currentInstancesForThisChunk.forEach(instance => allPotentialRepetitions.push(instance));
+                            processedChunkTexts.add(chunkText);
+                        }
+                    }
+                }
+                allPotentialRepetitions.sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
+                const finalFilteredOccurrences = []; const coveredSpans = []; let idCounter = 0;
+                for (const occ of allPotentialRepetitions) {
+                    let isCovered = false;
+                    for (const span of coveredSpans) { if (occ.start >= span.start && occ.end <= span.end && occ.text !== span.text) { isCovered = true; break; } }
+                    if (!isCovered) { finalFilteredOccurrences.push({ ...occ, id: `occurrence-${idCounter++}` }); coveredSpans.push({start: occ.start, end: occ.end, text: occ.text}); }
+                }
+                if (finalFilteredOccurrences.length > 0) {
+                    finalFilteredOccurrences.forEach(occ => {
+                        globalFoundOccurrences.push({
+                            id: occ.id, originalText: occ.text, groupKey: occ.text,
+                            startIndexInFullText: occ.start, endIndexInFullText: occ.end,
+                            context: extractContext(mainText, occ.start), checked: true
+                        });
+                    });
+                    resultsHeader.style.display = 'block'; removeButton.style.display = 'inline-block';
+                    statusMessage.textContent = `Found ${new Set(globalFoundOccurrences.map(o => o.groupKey)).size} unique repeated phrase(s) (${globalFoundOccurrences.length} total instances).`;
+                    statusMessage.className = 'mb-4 text-green-600'; renderRepetitionOccurrences();
+                } else { statusMessage.textContent = `No repetitions of ${minRepLength}+ words found.`; statusMessage.className = 'mb-4 text-slate-600'; }
+            }, 10);
+        });
+
+        function renderPreciseHighlight(lineText, lineStartIndexInFullText, itemStartIndexInFullText, itemLength) {
+            const relativeStart = itemStartIndexInFullText - lineStartIndexInFullText;
+            const relativeEnd = relativeStart + itemLength;
+            if (relativeStart >= 0 && relativeEnd <= lineText.length && relativeStart < relativeEnd) {
+                const before = escapeHTML(lineText.substring(0, relativeStart));
+                const highlighted = escapeHTML(lineText.substring(relativeStart, relativeEnd));
+                const after = escapeHTML(lineText.substring(relativeEnd));
+                return `${before}<span class="highlight">${highlighted}</span>${after}`;
+            }
+            return escapeHTML(lineText);
+        }
+
+        function renderSimpleOccurrences() {
+            resultsDiv.innerHTML = '';
+            const numberToOccurrenceMap = currentFindType === 'numberedRefs'
+                ? new Map(globalFoundOccurrences.map(o => [o.searchNumber, o]))
+                : null;
+            globalFoundOccurrences.forEach((occ) => {
+                const itemDiv = document.createElement('div'); itemDiv.className = 'occurrence-item flex items-start space-x-3'; itemDiv.id = occ.id;
+                const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = occ.checked; checkbox.id = `checkbox-${occ.id}`;
+                checkbox.className = 'checkbox-base mt-1 cursor-pointer flex-shrink-0';
+                checkbox.addEventListener('change', () => { occ.checked = checkbox.checked; });
+                itemDiv.appendChild(checkbox);
+                const textDiv = document.createElement('div'); textDiv.className = 'flex-1 min-w-0';
+                if (occ.context.above) { const p=document.createElement('p'); p.className='context-line'; p.textContent=`... ${occ.context.above}`; textDiv.appendChild(p); }
+                const currentP = document.createElement('p'); currentP.className = 'current-line';
+                currentP.innerHTML = renderPreciseHighlight(occ.context.current, occ.context.lineStartIndex, occ.startIndexInFullText, occ.originalText.length);
+                textDiv.appendChild(currentP);
+                if (occ.context.below) { const p=document.createElement('p'); p.className='context-line'; p.textContent=`... ${occ.context.below}`; textDiv.appendChild(p); }
+                if (currentFindType === 'numberedRefs') {
+                    const btnContainer = document.createElement('span'); btnContainer.className = "inline-flex items-center mt-1";
+                    const findPrevNumBtn = document.createElement('button'); findPrevNumBtn.textContent = `Prev "${occ.originalText}"`;
+                    findPrevNumBtn.className = 'num-nav-btn'; findPrevNumBtn.dataset.occurrenceId = occ.id;
+                    findPrevNumBtn.addEventListener('click', handleFindPreviousForNumber); btnContainer.appendChild(findPrevNumBtn);
+                    const findNextNumBtn = document.createElement('button'); findNextNumBtn.textContent = `Next "${occ.originalText}"`;
+                    findNextNumBtn.className = 'num-nav-btn'; findNextNumBtn.dataset.occurrenceId = occ.id;
+                    findNextNumBtn.addEventListener('click', handleFindNextForNumber); btnContainer.appendChild(findNextNumBtn);
+                    const mainText = mainTextArea.value;
+                    const prevRegex = new RegExp(`(?<!\\d)${escapeRegExp(occ.originalText)}(?!\\d)`, 'g');
+                    let lastMatch = null; let currentMatch; const textBeforeCurrent = mainText.substring(0, occ.startIndexInFullText);
+                    while((currentMatch = prevRegex.exec(textBeforeCurrent)) !== null) { lastMatch = currentMatch; }
+                    findPrevNumBtn.disabled = !lastMatch;
+                    const nextRegex = new RegExp(`(?<!\\d)${escapeRegExp(occ.originalText)}(?!\\d)`);
+                    findNextNumBtn.disabled = !nextRegex.exec(mainText.substring(occ.endIndexInFullText));
+                    let warningMsg = ""; const currentNum = occ.searchNumber;
+                    const nextNumInSequence = numberToOccurrenceMap.get(currentNum + 1);
+                    const prevNumInSequence = numberToOccurrenceMap.get(currentNum - 1);
+                    if (nextNumInSequence && occ.startIndexInFullText > nextNumInSequence.startIndexInFullText) { warningMsg += `⚠️ After next ('${currentNum + 1}') `; }
+                    if (prevNumInSequence && occ.startIndexInFullText < prevNumInSequence.startIndexInFullText) { warningMsg += `⚠️ Before previous ('${currentNum - 1}')`; }
+                    if (warningMsg) { const warningSpan = document.createElement('span'); warningSpan.className = 'order-warning'; warningSpan.textContent = warningMsg.trim(); btnContainer.appendChild(warningSpan); }
+                    textDiv.appendChild(btnContainer);
+                }
+                itemDiv.appendChild(textDiv); resultsDiv.appendChild(itemDiv);
+            });
+        }
+
+        function handleFindNextForNumber(event) {
+            const occurrenceId = event.target.dataset.occurrenceId;
+            const targetOccIndex = globalFoundOccurrences.findIndex(o => o.id === occurrenceId);
+            if (targetOccIndex === -1) return;
+            const targetOcc = globalFoundOccurrences[targetOccIndex];
+            const mainText = mainTextArea.value; const searchTerm = targetOcc.originalText;
+            let searchFrom = targetOcc.endIndexInFullText;
+            const regex = new RegExp(`(?<!\\d)${escapeRegExp(searchTerm)}(?!\\d)`);
+            const match = regex.exec(mainText.substring(searchFrom));
+            if (match) {
+                const newStartIndex = searchFrom + match.index;
+                globalFoundOccurrences[targetOccIndex] = {
+                    ...targetOcc, startIndexInFullText: newStartIndex, endIndexInFullText: newStartIndex + searchTerm.length,
+                    context: extractContext(mainText, newStartIndex), checked: true,
+                    foundAfterIndex: targetOcc.endIndexInFullText
+                };
+                renderSimpleOccurrences();
+                statusMessage.textContent = `Updated to next occurrence for "${searchTerm}".`; statusMessage.className = 'mb-4 text-blue-600';
+            } else {
+                statusMessage.textContent = `No further occurrences of "${searchTerm}" found.`; statusMessage.className = 'mb-4 text-slate-600';
+                event.target.disabled = true;
+            }
+        }
+
+        function handleFindPreviousForNumber(event) {
+            const occurrenceId = event.target.dataset.occurrenceId;
+            const targetOccIndex = globalFoundOccurrences.findIndex(o => o.id === occurrenceId);
+            if (targetOccIndex === -1) return;
+            const targetOcc = globalFoundOccurrences[targetOccIndex];
+            const mainText = mainTextArea.value; const searchTerm = targetOcc.originalText;
+            const searchUpTo = targetOcc.startIndexInFullText;
+            const regex = new RegExp(`(?<!\\d)${escapeRegExp(searchTerm)}(?!\\d)`, 'g');
+            let lastMatch = null; let currentMatch; const textBeforeCurrent = mainText.substring(0, searchUpTo);
+            while((currentMatch = regex.exec(textBeforeCurrent)) !== null) { lastMatch = currentMatch; }
+            if (lastMatch) {
+                const newStartIndex = lastMatch.index;
+                 globalFoundOccurrences[targetOccIndex] = {
+                    ...targetOcc, startIndexInFullText: newStartIndex, endIndexInFullText: newStartIndex + searchTerm.length,
+                    context: extractContext(mainText, newStartIndex), checked: true,
+                };
+                renderSimpleOccurrences();
+                statusMessage.textContent = `Updated to previous occurrence for "${searchTerm}".`; statusMessage.className = 'mb-4 text-blue-600';
+            } else {
+                statusMessage.textContent = `No earlier occurrences of "${searchTerm}" found.`; statusMessage.className = 'mb-4 text-slate-600';
+                event.target.disabled = true;
+            }
+        }
+
+        function renderRepetitionOccurrences() {
+            resultsDiv.innerHTML = '';
+            const groupedByPhrase = globalFoundOccurrences.reduce((acc, occ) => {
+                acc[occ.groupKey] = acc[occ.groupKey] || []; acc[occ.groupKey].push(occ); return acc;
+            }, {});
+            Object.entries(groupedByPhrase).forEach(([phrase, occurrences]) => {
+                const groupContainer = document.createElement('div'); groupContainer.className = 'repetition-group-item mb-4';
+                const headerDiv = document.createElement('div'); headerDiv.className = 'repetition-group-header';
+                const masterCheckbox = document.createElement('input'); masterCheckbox.type = 'checkbox';
+                masterCheckbox.className = 'checkbox-base master-checkbox cursor-pointer'; masterCheckbox.dataset.groupKey = phrase;
+                const phraseSpan = document.createElement('span'); phraseSpan.className = 'group-text';
+                phraseSpan.textContent = `"${phrase}" (${occurrences.length}x)`;
+                headerDiv.appendChild(masterCheckbox); headerDiv.appendChild(phraseSpan); groupContainer.appendChild(headerDiv);
+                const instancesList = document.createElement('div'); instancesList.className = 'ml-6 space-y-2';
+                occurrences.forEach(occ => {
+                    const itemDiv = document.createElement('div'); itemDiv.className = 'occurrence-item flex items-start space-x-3 !p-2 !mb-2';
+                    itemDiv.id = occ.id;
+                    const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = occ.checked;
+                    checkbox.id = `checkbox-${occ.id}`; checkbox.className = 'checkbox-base mt-1 cursor-pointer flex-shrink-0 individual-rep-checkbox';
+                    checkbox.dataset.groupKey = phrase;
+                    checkbox.addEventListener('change', () => { occ.checked = checkbox.checked; updateMasterCheckboxState(phrase); });
+                    itemDiv.appendChild(checkbox);
+                    const textDiv = document.createElement('div'); textDiv.className = 'flex-1 min-w-0';
+                    if (occ.context.above) { const p=document.createElement('p'); p.className='context-line'; p.textContent=`... ${occ.context.above}`; textDiv.appendChild(p); }
+                    const currentP = document.createElement('p'); currentP.className = 'current-line';
+                    currentP.innerHTML = renderPreciseHighlight(occ.context.current, occ.context.lineStartIndex, occ.startIndexInFullText, occ.originalText.length);
+                    textDiv.appendChild(currentP);
+                    if (occ.context.below) { const p=document.createElement('p'); p.className='context-line'; p.textContent=`... ${occ.context.below}`; textDiv.appendChild(p); }
+                    itemDiv.appendChild(textDiv); instancesList.appendChild(itemDiv);
+                });
+                groupContainer.appendChild(instancesList); resultsDiv.appendChild(groupContainer);
+                masterCheckbox.addEventListener('change', () => {
+                    const isChecked = masterCheckbox.checked;
+                    occurrences.forEach(occ => {
+                        occ.checked = isChecked;
+                        const individualCb = document.getElementById(`checkbox-${occ.id}`);
+                        if (individualCb) individualCb.checked = isChecked;
+                    });
+                });
+                updateMasterCheckboxState(phrase);
+            });
+        }
+
+        function updateMasterCheckboxState(groupKey) {
+            const groupOccurrences = globalFoundOccurrences.filter(occ => occ.groupKey === groupKey);
+            const masterCb = document.querySelector(`.master-checkbox[data-group-key="${groupKey.replace(/"/g, '\\"')}"]`);
+            if (!masterCb || !groupOccurrences.length) return;
+            const allChecked = groupOccurrences.every(occ => occ.checked);
+            const someChecked = groupOccurrences.some(occ => occ.checked);
+            if (allChecked) { masterCb.checked = true; masterCb.indeterminate = false; }
+            else if (someChecked) { masterCb.checked = false; masterCb.indeterminate = true; }
+            else { masterCb.checked = false; masterCb.indeterminate = false; }
+        }
+
+        removeButton.addEventListener('click', () => {
+            let text = mainTextArea.value;
+            const occurrencesToRemove = globalFoundOccurrences.filter(occ => occ.checked).sort((a, b) => b.startIndexInFullText - a.startIndexInFullText);
+            if (occurrencesToRemove.length === 0) { statusMessage.textContent = 'No items selected for removal.'; statusMessage.className = 'mb-4 text-amber-600'; return; }
+
+            const removedCount = occurrencesToRemove.length;
+            occurrencesToRemove.forEach(occ => { text = text.substring(0, occ.startIndexInFullText) + text.substring(occ.endIndexInFullText); });
+            mainTextArea.value = text;
+            saveState(text, `Removed ${removedCount} item(s)`);
+
+            clearPreviousResults();
+            statusMessage.textContent = `Removed ${removedCount} item(s).`;
+            statusMessage.className = 'mb-4 text-green-600';
+        });
+
+        // Initial setup
+        saveState(mainTextArea.value, "Initial document loaded", true);
+        updateWordCount();
+        updateUndoRedoButtons();
+        renderHistoryLog();
+
+    </script>
+</body>
+</html>
